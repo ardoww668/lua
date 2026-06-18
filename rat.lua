@@ -71,65 +71,143 @@ end
 
 Menu.Banner = {
     enabled = true,
-    imageUrl = "https://hizliresim.com/t7rdy5t",
+    imageUrl = "https://i.hizliresim.com/t7rdy5t.png",
     height = 100
 }
 
 Menu.bannerTexture = nil
 Menu.bannerWidth = 0
 Menu.bannerHeight = 0
+Menu._bannerLoadToken = 0
+
+function Menu.ResolveBannerCandidates(url)
+    local candidates = {}
+    local seen = {}
+
+    local function add(u)
+        if u and u ~= "" and not seen[u] then
+            seen[u] = true
+            table.insert(candidates, u)
+        end
+    end
+
+    if not url or url == "" then return candidates end
+
+    local id = url:match("i%.hizliresim%.com/([%w%-]+)") or url:match("hizliresim%.com/([%w%-]+)")
+    if id then
+        id = id:gsub("%.png$", ""):gsub("%.jpg$", "")
+        add("https://i.hizliresim.com/" .. id .. ".png")
+        add("https://i.hizliresim.com/" .. id .. ".jpg")
+        add("http://i.hizliresim.com/" .. id .. ".png")
+        add("http://i.hizliresim.com/" .. id .. ".jpg")
+        add("https://hizliresim.com/" .. id)
+    end
+
+    add(url)
+    if not url:find("%.png") and not url:find("%.jpg") then
+        add(url .. ".png")
+    end
+
+    return candidates
+end
+
+function Menu.ExtractImageUrlFromHtml(html)
+    if not html or html:sub(1, 1) ~= "<" then return nil end
+    local url = html:match('src="(https://i%.hizliresim%.com/[^"]+)"')
+        or html:match('src="(http://i%.hizliresim%.com/[^"]+)"')
+        or html:match('property="og:image"%s+content="([^"]+)"')
+        or html:match('content="(https://i%.hizliresim%.com/[^"]+)"')
+    if url then
+        url = url:gsub("&amp;", "&")
+        return url
+    end
+    return nil
+end
+
+function Menu.IsLikelyImageBuffer(body)
+    if not body or #body < 64 then return false end
+    local b1, b2, b3, b4 = body:byte(1, 4)
+    if b1 == 0x89 and b2 == 0x50 and b3 == 0x4E and b4 == 0x47 then return true end
+    if b1 == 0xFF and b2 == 0xD8 then return true end
+    if body:sub(1, 3) == "GIF" then return true end
+    if body:sub(1, 2) == "BM" then return true end
+    local first = body:sub(1, 1)
+    if first == "<" or first == "{" then return false end
+    return false
+end
 
 function Menu.LoadBannerTexture(url)
     if not url or url == "" then return end
     if not Susano or not Susano.HttpGet or not Susano.LoadTextureFromBuffer then return end
 
-    if CreateThread then
-        CreateThread(function()
-            local success, result = pcall(function()
-                local status, body = Susano.HttpGet(url)
-                if status == 200 and body and #body > 0 then
-                    local textureId, width, height = Susano.LoadTextureFromBuffer(body)
-                    if textureId and textureId ~= 0 then
-                        Menu.bannerTexture = textureId
-                        Menu.bannerWidth = width
-                        Menu.bannerHeight = height
-                        return textureId
+    Menu._bannerLoadToken = (Menu._bannerLoadToken or 0) + 1
+    local loadToken = Menu._bannerLoadToken
+    Menu.bannerTexture = nil
+    Menu.bannerWidth = 0
+    Menu.bannerHeight = 0
+
+    local candidates = Menu.ResolveBannerCandidates(url)
+
+    local function loadImageBody(body)
+        if not body or not Menu.IsLikelyImageBuffer(body) then return false end
+        local texOk, textureId, width, height = pcall(Susano.LoadTextureFromBuffer, body)
+        if texOk and textureId and textureId ~= 0 then
+            if loadToken == Menu._bannerLoadToken then
+                Menu.bannerTexture = textureId
+                Menu.bannerWidth = width or 0
+                Menu.bannerHeight = height or 0
+            end
+            return true
+        end
+        return false
+    end
+
+    local function tryLoad()
+        for _, tryUrl in ipairs(candidates) do
+            if loadToken ~= Menu._bannerLoadToken then return end
+
+            local ok, status, body = pcall(function()
+                return Susano.HttpGet(tryUrl)
+            end)
+
+            if ok and status == 200 and body and #body > 0 then
+                if loadImageBody(body) then return end
+
+                local extracted = Menu.ExtractImageUrlFromHtml(body)
+                if extracted and extracted ~= tryUrl then
+                    local ok2, status2, body2 = pcall(function()
+                        return Susano.HttpGet(extracted)
+                    end)
+                    if ok2 and status2 == 200 and loadImageBody(body2) then
+                        return
                     end
                 end
-                return nil
-            end)
-            if not success then
             end
-        end)
-    else
-        local success, result = pcall(function()
-            local status, body = Susano.HttpGet(url)
-            if status == 200 and body and #body > 0 then
-                local textureId, width, height = Susano.LoadTextureFromBuffer(body)
-                if textureId and textureId ~= 0 then
-                    Menu.bannerTexture = textureId
-                    Menu.bannerWidth = width
-                    Menu.bannerHeight = height
-                    print("Banner texture loaded successfully")
-                    return textureId
-                end
-            end
-            return nil
-        end)
-        if not success then
         end
+    end
+
+    if CreateThread then
+        CreateThread(tryLoad)
+    else
+        tryLoad()
     end
 end
 
 Menu.Colors = {
-    HeaderPink = { r = 255, g = 255, b = 255 },
-    SelectedBg = { r = 255, g = 255, b = 255 },
+    HeaderPink = { r = 0, g = 0, b = 0 },
+    SelectedBg = { r = 55, g = 55, b = 55 },
+    Accent = { r = 255, g = 255, b = 255 },
     TextWhite = { r = 255, g = 255, b = 255 },
     BackgroundDark = { r = 0, g = 0, b = 0 },
     FooterBlack = { r = 0, g = 0, b = 0 }
 }
 
 Menu.CurrentTheme = "Black"
+
+function Menu.GetAccentColor()
+    local c = Menu.Colors.Accent or Menu.Colors.SelectedBg or { r = 255, g = 255, b = 255 }
+    return (c.r or 255) / 255.0, (c.g or 255) / 255.0, (c.b or 255) / 255.0
+end
 
 function Menu.ApplyTheme(themeName)
     if not themeName or type(themeName) ~= "string" then
@@ -139,24 +217,28 @@ function Menu.ApplyTheme(themeName)
     local themeLower = string.lower(themeName)
 
     if themeLower == "black" then
-        Menu.Colors.HeaderPink = { r = 255, g = 255, b = 255 }
-        Menu.Colors.SelectedBg = { r = 255, g = 255, b = 255 }
-        Menu.Banner.imageUrl = "https://hizliresim.com/t7rdy5t"
+        Menu.Colors.HeaderPink = { r = 0, g = 0, b = 0 }
+        Menu.Colors.SelectedBg = { r = 55, g = 55, b = 55 }
+        Menu.Colors.Accent = { r = 255, g = 255, b = 255 }
+        Menu.Banner.imageUrl = "https://i.hizliresim.com/t7rdy5t.png"
         Menu.CurrentTheme = "Black"
     elseif themeLower == "red" then
-        Menu.Colors.HeaderPink = { r = 255, g = 0, b = 0 }
+        Menu.Colors.HeaderPink = { r = 180, g = 0, b = 0 }
         Menu.Colors.SelectedBg = { r = 255, g = 0, b = 0 }
-        Menu.Banner.imageUrl = "https://hizliresim.com/j6bpe5s"
+        Menu.Colors.Accent = { r = 255, g = 0, b = 0 }
+        Menu.Banner.imageUrl = "https://i.hizliresim.com/j6bpe5s.png"
         Menu.CurrentTheme = "Red"
     elseif themeLower == "green" then
-        Menu.Colors.HeaderPink = { r = 0, g = 200, b = 80 }
+        Menu.Colors.HeaderPink = { r = 0, g = 140, b = 60 }
         Menu.Colors.SelectedBg = { r = 0, g = 200, b = 80 }
-        Menu.Banner.imageUrl = "https://hizliresim.com/tnp56cj"
+        Menu.Colors.Accent = { r = 0, g = 200, b = 80 }
+        Menu.Banner.imageUrl = "https://i.hizliresim.com/tnp56cj.png"
         Menu.CurrentTheme = "Green"
     elseif themeLower == "blue" then
-        Menu.Colors.HeaderPink = { r = 30, g = 120, b = 255 }
+        Menu.Colors.HeaderPink = { r = 20, g = 90, b = 200 }
         Menu.Colors.SelectedBg = { r = 30, g = 120, b = 255 }
-        Menu.Banner.imageUrl = "https://hizliresim.com/sh37mec"
+        Menu.Colors.Accent = { r = 30, g = 120, b = 255 }
+        Menu.Banner.imageUrl = "https://i.hizliresim.com/sh37mec.png"
         Menu.CurrentTheme = "Blue"
     else
         Menu.ApplyTheme("Black")
@@ -252,27 +334,19 @@ function Menu.DrawHeader()
     local x = scaledPos.x
     local y = scaledPos.y
     local width = scaledPos.width - 1
-    local height = scaledPos.headerHeight
-    local radius = scaledPos.headerRadius
     local bannerHeight = Menu.Banner.height * scale
+    local fallbackR = (Menu.Colors.HeaderPink and Menu.Colors.HeaderPink.r) or 0
+    local fallbackG = (Menu.Colors.HeaderPink and Menu.Colors.HeaderPink.g) or 0
+    local fallbackB = (Menu.Colors.HeaderPink and Menu.Colors.HeaderPink.b) or 0
 
     if Menu.Banner.enabled then
         if Menu.bannerTexture and Menu.bannerTexture > 0 and Susano and Susano.DrawImage then
-            -- Dessiner la bannière sans coins arrondis
             Susano.DrawImage(Menu.bannerTexture, x, y, width, bannerHeight, 1, 1, 1, 1, 0)
         else
-            Menu.DrawRect(x, y, width, height, Menu.Colors.HeaderPink.r, Menu.Colors.HeaderPink.g, Menu.Colors.HeaderPink.b, 255)
-
-            local logoX = x + width / 2 - 12
-            local logoY = y + height / 2 - 20
-            Menu.DrawText(logoX, logoY, "P", 44, 1.0, 1.0, 1.0, 1.0)
+            Menu.DrawRect(x, y, width, bannerHeight, fallbackR, fallbackG, fallbackB, 255)
         end
     else
-        Menu.DrawRect(x, y, width, height, Menu.Colors.HeaderPink.r, Menu.Colors.HeaderPink.g, Menu.Colors.HeaderPink.b, 255)
-
-        local logoX = x + width / 2 - 12
-        local logoY = y + height / 2 - 20
-        Menu.DrawText(logoX, logoY, "P", 44, 1.0, 1.0, 1.0, 1.0)
+        Menu.DrawRect(x, y, width, bannerHeight, fallbackR, fallbackG, fallbackB, 255)
     end
 end
 
@@ -1444,9 +1518,7 @@ function Menu.DrawLoadingBar(alpha)
     end
 
     local progressSegments = math.floor(segments * (Menu.LoadingProgress / 100.0))
-    local accentR = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.r) and (Menu.Colors.SelectedBg.r / 255.0) or 1.0
-    local accentG = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.g) and (Menu.Colors.SelectedBg.g / 255.0) or 0.0
-    local accentB = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.b) and (Menu.Colors.SelectedBg.b / 255.0) or 1.0
+    local accentR, accentG, accentB = Menu.GetAccentColor()
 
     for i = 0, progressSegments do
         local angle = math.rad(startAngle + (i * step))
@@ -2911,9 +2983,7 @@ function Menu.DrawInputWindow()
         Menu.DrawRect(x, y, width, height, 20, 20, 20, 255)
     end
     
-    local r = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.r) and (Menu.Colors.SelectedBg.r / 255.0) or 1.0
-    local g = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.g) and (Menu.Colors.SelectedBg.g / 255.0) or 0.0
-    local b = (Menu.Colors.SelectedBg and Menu.Colors.SelectedBg.b) and (Menu.Colors.SelectedBg.b / 255.0) or 1.0
+    local r, g, b = Menu.GetAccentColor()
     
     if Susano and Susano.DrawRectFilled then
         Susano.DrawRectFilled(x, y, width, 2, r, g, b, 1.0, 0)
