@@ -222,6 +222,12 @@ function Menu.ApplyTheme(themeName)
         Menu.Colors.Accent = { r = 255, g = 255, b = 255 }
         Menu.Banner.imageUrl = "https://i.hizliresim.com/t7rdy5t.png"
         Menu.CurrentTheme = "Black"
+    elseif themeLower == "akide" then
+        Menu.Colors.HeaderPink = { r = 160, g = 100, b = 20 }
+        Menu.Colors.SelectedBg = { r = 255, g = 175, b = 45 }
+        Menu.Colors.Accent = { r = 255, g = 190, b = 60 }
+        Menu.Banner.imageUrl = "https://i.hizliresim.com/sgmgao5.png"
+        Menu.CurrentTheme = "Akide"
     elseif themeLower == "red" then
         Menu.Colors.HeaderPink = { r = 180, g = 0, b = 0 }
         Menu.Colors.SelectedBg = { r = 255, g = 0, b = 0 }
