@@ -71,7 +71,7 @@ end
 
 Menu.Banner = {
     enabled = true,
-    imageUrl = "https://resmim.net/cdn/2026/03/04/wziM1C.png",
+    imageUrl = "https://hizliresim.com/t7rdy5t",
     height = 100
 }
 
@@ -122,55 +122,53 @@ function Menu.LoadBannerTexture(url)
 end
 
 Menu.Colors = {
-    HeaderPink = { r = 148, g = 0, b = 211 },
-    SelectedBg = { r = 148, g = 0, b = 211 },
+    HeaderPink = { r = 255, g = 255, b = 255 },
+    SelectedBg = { r = 255, g = 255, b = 255 },
     TextWhite = { r = 255, g = 255, b = 255 },
     BackgroundDark = { r = 0, g = 0, b = 0 },
     FooterBlack = { r = 0, g = 0, b = 0 }
 }
 
-Menu.CurrentTheme = "Purple"
+Menu.CurrentTheme = "Black"
 
 function Menu.ApplyTheme(themeName)
     if not themeName or type(themeName) ~= "string" then
-        themeName = "Purple"
+        themeName = "Black"
     end
-    
-    -- Normaliser la casse pour la comparaison
+
     local themeLower = string.lower(themeName)
-    Menu.CurrentTheme = themeName
-    
-    if themeLower == "red" then
+
+    if themeLower == "black" then
+        Menu.Colors.HeaderPink = { r = 255, g = 255, b = 255 }
+        Menu.Colors.SelectedBg = { r = 255, g = 255, b = 255 }
+        Menu.Banner.imageUrl = "https://hizliresim.com/t7rdy5t"
+        Menu.CurrentTheme = "Black"
+    elseif themeLower == "red" then
         Menu.Colors.HeaderPink = { r = 255, g = 0, b = 0 }
         Menu.Colors.SelectedBg = { r = 255, g = 0, b = 0 }
-        Menu.Banner.imageUrl = "https://hizliresim.com/t7rdy5t"
+        Menu.Banner.imageUrl = "https://hizliresim.com/j6bpe5s"
         Menu.CurrentTheme = "Red"
-    elseif themeLower == "purple" then
-        Menu.Colors.HeaderPink = { r = 148, g = 0, b = 211 }
-        Menu.Colors.SelectedBg = { r = 148, g = 0, b = 211 }
-        Menu.Banner.imageUrl = "https://resmim.net/cdn/2026/03/04/wzifm1.png"
-        Menu.CurrentTheme = "Purple"
-    elseif themeLower == "gray" then
-        Menu.Colors.HeaderPink = { r = 128, g = 128, b = 128 }
-        Menu.Colors.SelectedBg = { r = 128, g = 128, b = 128 }
-        Menu.Banner.imageUrl = "https://resmim.net/cdn/2026/03/04/wziX7h.png"
-        Menu.CurrentTheme = "Gray"
-    elseif themeLower == "pink" then
-        Menu.Colors.HeaderPink = { r = 255, g = 20, b = 147 }
-        Menu.Colors.SelectedBg = { r = 255, g = 20, b = 147 }
-        Menu.Banner.imageUrl = "https://resmim.net/cdn/2026/03/04/wzigvc.png"
-        Menu.CurrentTheme = "pink"
+    elseif themeLower == "green" then
+        Menu.Colors.HeaderPink = { r = 0, g = 200, b = 80 }
+        Menu.Colors.SelectedBg = { r = 0, g = 200, b = 80 }
+        Menu.Banner.imageUrl = "https://hizliresim.com/tnp56cj"
+        Menu.CurrentTheme = "Green"
+    elseif themeLower == "blue" then
+        Menu.Colors.HeaderPink = { r = 30, g = 120, b = 255 }
+        Menu.Colors.SelectedBg = { r = 30, g = 120, b = 255 }
+        Menu.Banner.imageUrl = "https://hizliresim.com/sh37mec"
+        Menu.CurrentTheme = "Blue"
     else
-        Menu.Colors.HeaderPink = { r = 148, g = 0, b = 211 }
-        Menu.Colors.SelectedBg = { r = 148, g = 0, b = 211 }
-        Menu.Banner.imageUrl = "https://resmim.net/cdn/2026/03/04/wzieCy.png"
-        Menu.CurrentTheme = "Purple"
+        Menu.ApplyTheme("Black")
+        return
     end
 
     if Menu.Banner.enabled and Menu.Banner.imageUrl then
         Menu.LoadBannerTexture(Menu.Banner.imageUrl)
     end
 end
+
+Menu.ApplyTheme("Black")
 
 Menu.Position = {
     x = 50,
@@ -698,9 +696,9 @@ function Menu.DrawItem(x, itemY, width, itemHeight, item, isSelected)
             circleX = toggleX + 2
         end
 
-        local isGrayTheme = (Menu.CurrentTheme == "Gray")
+        local isBlackTheme = (Menu.CurrentTheme == "Black")
         local circleR, circleG, circleB
-        if isGrayTheme then
+        if isBlackTheme then
             circleR = 1.0
             circleG = 1.0
             circleB = 1.0
@@ -818,9 +816,9 @@ function Menu.DrawItem(x, itemY, width, itemHeight, item, isSelected)
             circleX = toggleX + 2
         end
 
-        local isGrayTheme = (Menu.CurrentTheme == "Gray")
+        local isBlackTheme = (Menu.CurrentTheme == "Black")
         local circleR, circleG, circleB
-        if isGrayTheme then
+        if isBlackTheme then
             circleR = 1.0
             circleG = 1.0
             circleB = 1.0
@@ -3009,6 +3007,79 @@ end
 
 if Menu.Banner.enabled and Menu.Banner.imageUrl then
     Menu.LoadBannerTexture(Menu.Banner.imageUrl)
+end
+
+function Menu.GetConfigDirectory()
+    if Menu._configDir then return Menu._configDir end
+    local base = os.getenv("USERPROFILE") or os.getenv("HOME") or "."
+    base = string.gsub(base, "\\", "/")
+    Menu._configDir = base .. "/Documents/PhantomLua/configs"
+    return Menu._configDir
+end
+
+function Menu.EnsureConfigDirectory()
+    local dir = Menu.GetConfigDirectory()
+    local winDir = string.gsub(dir, "/", "\\")
+    if os and os.execute then
+        os.execute('if not exist "' .. winDir .. '" mkdir "' .. winDir .. '"')
+    end
+    return dir
+end
+
+function Menu.SanitizeConfigName(name)
+    if not name or type(name) ~= "string" then return nil end
+    name = string.gsub(name, "^%s+", "")
+    name = string.gsub(name, "%s+$", "")
+    name = string.gsub(name, "[^%w%-_%s]", "")
+    name = string.gsub(name, "%s+", "_")
+    if name == "" then return nil end
+    return name
+end
+
+function Menu.SaveConfigFile(name, content)
+    name = Menu.SanitizeConfigName(name)
+    if not name or not content then return false, "invalid_name" end
+    if not io or not io.open then return false, "io_unavailable" end
+
+    Menu.EnsureConfigDirectory()
+    local path = Menu.GetConfigDirectory() .. "/" .. name .. ".json"
+    local file = io.open(path, "w")
+    if not file then return false, path end
+    file:write(content)
+    file:close()
+    return true, path
+end
+
+function Menu.LoadConfigFile(name)
+    name = Menu.SanitizeConfigName(name)
+    if not name or not io or not io.open then return nil, "invalid_name" end
+
+    local path = Menu.GetConfigDirectory() .. "/" .. name .. ".json"
+    local file = io.open(path, "r")
+    if not file then return nil, path end
+    local content = file:read("*a")
+    file:close()
+    return content, path
+end
+
+function Menu.ListConfigFiles()
+    local configs = {}
+    local dir = Menu.GetConfigDirectory()
+    if io and io.popen then
+        local winDir = string.gsub(dir, "/", "\\")
+        local handle = io.popen('dir /b "' .. winDir .. '\\*.json" 2>nul')
+        if handle then
+            for line in handle:lines() do
+                local configName = string.gsub(line, "%.json$", "")
+                if configName ~= "" then
+                    table.insert(configs, configName)
+                end
+            end
+            handle:close()
+        end
+    end
+    table.sort(configs)
+    return configs
 end
 
 
