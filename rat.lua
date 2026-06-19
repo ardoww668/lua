@@ -2191,7 +2191,8 @@ function Menu.Render()
         Susano.SubmitFrame()
     end
 
-    if not Menu.Visible and not Menu.ShowKeybinds and Menu.LoadingBarAlpha <= 0 and Menu.KeySelectorAlpha <= 0 then
+    if not Menu.Visible and not Menu.ShowKeybinds and Menu.LoadingBarAlpha <= 0 and Menu.KeySelectorAlpha <= 0
+        and not Menu.PreventResetFrame and not _G.freecamActive then
         if Susano.ResetFrame then
             Susano.ResetFrame()
         end
@@ -2253,6 +2254,104 @@ Menu.KeyNames = {
 
 function Menu.GetKeyName(keyCode)
     return Menu.KeyNames[keyCode] or ("Key 0x" .. string.format("%02X", keyCode))
+end
+
+Menu.SliderRepeat = Menu.SliderRepeat or { key = nil, nextTime = 0 }
+
+function Menu.NotifySliderChange(item)
+    if not item then return end
+    if item.onSliderChange then
+        if item.type == "slider" then
+            item.onSliderChange(item.value)
+        elseif item.type == "toggle" and item.hasSlider then
+            item.onSliderChange(item.sliderValue)
+        end
+    end
+    if item.onClick then
+        if item.type == "slider" then
+            item.onClick(item.value)
+        elseif item.type == "toggle" and item.hasSlider then
+            item.onClick(item.value)
+        end
+    end
+end
+
+function Menu.AdjustSliderItem(item, direction)
+    if not item then return false end
+    direction = direction or 1
+
+    if item.type == "slider" then
+        local step = item.step or 1.0
+        if direction < 0 then
+            item.value = math.max(item.min or 0.0, (item.value or item.min or 0.0) - step)
+        else
+            item.value = math.min(item.max or 100.0, (item.value or item.min or 0.0) + step)
+        end
+        if item.name == "Smooth Menu" then
+            Menu.SmoothFactor = item.value / 100.0
+        elseif item.name == "Menu Size" then
+            Menu.Scale = item.value / 100.0
+        end
+        Menu.NotifySliderChange(item)
+        return true
+    elseif item.type == "toggle" and item.hasSlider then
+        local step = item.sliderStep or 0.1
+        if direction < 0 then
+            item.sliderValue = math.max(item.sliderMin or 0.0, (item.sliderValue or item.sliderMin or 0.0) - step)
+        else
+            item.sliderValue = math.min(item.sliderMax or 100.0, (item.sliderValue or item.sliderMin or 0.0) + step)
+        end
+        Menu.NotifySliderChange(item)
+        return true
+    end
+
+    return false
+end
+
+function Menu.ProcessSliderHoldRepeat(item, leftDown, rightDown, leftWasDown, rightWasDown, leftPressed, rightPressed)
+    if not item then return false end
+    if item.type ~= "slider" and not (item.type == "toggle" and item.hasSlider) then
+        return false
+    end
+
+    local now = GetGameTimer and GetGameTimer() or 0
+    local key = nil
+    local direction = 0
+    local isFirstPress = false
+
+    if leftPressed == true or (leftDown == true and not leftWasDown) then
+        key = 0x25
+        direction = -1
+        isFirstPress = true
+    elseif rightPressed == true or (rightDown == true and not rightWasDown) then
+        key = 0x27
+        direction = 1
+        isFirstPress = true
+    elseif leftDown == true and Menu.SliderRepeat.key == 0x25 then
+        key = 0x25
+        direction = -1
+    elseif rightDown == true and Menu.SliderRepeat.key == 0x27 then
+        key = 0x27
+        direction = 1
+    end
+
+    if not key then
+        Menu.SliderRepeat.key = nil
+        return false
+    end
+
+    if isFirstPress then
+        Menu.SliderRepeat.key = key
+        Menu.SliderRepeat.nextTime = now + 350
+        return Menu.AdjustSliderItem(item, direction)
+    end
+
+    if Menu.SliderRepeat.key == key and now >= Menu.SliderRepeat.nextTime then
+        Menu.SliderRepeat.nextTime = now + 60
+        return Menu.AdjustSliderItem(item, direction)
+    end
+
+    return false
 end
 
 function Menu.HandleInput()
@@ -2424,7 +2523,8 @@ function Menu.HandleInput()
             local wasVisible = Menu.Visible
             Menu.Visible = not Menu.Visible
 
-            if wasVisible and not Menu.Visible and not Menu.ShowKeybinds then
+            if wasVisible and not Menu.Visible and not Menu.ShowKeybinds
+                and not Menu.PreventResetFrame and not _G.freecamActive then
                 if Susano and Susano.ResetFrame then
                     Susano.ResetFrame()
                 end
@@ -2686,22 +2786,7 @@ function Menu.HandleInput()
                     if Menu.CurrentItem > 0 and Menu.CurrentItem <= #currentTab.items then
                         local selectedItem = currentTab.items[Menu.CurrentItem]
                         if selectedItem then
-                            if selectedItem.type == "slider" then
-                                local step = 1.0
-                                if selectedItem.step then
-                                    step = selectedItem.step
-                                end
-                                selectedItem.value = math.max(selectedItem.min or 0.0, (selectedItem.value or selectedItem.min or 0.0) - step)
-                                if selectedItem.name == "Smooth Menu" then
-                                    Menu.SmoothFactor = selectedItem.value / 100.0
-                                elseif selectedItem.name == "Menu Size" then
-                                    Menu.Scale = selectedItem.value / 100.0
-                                end
-                                if selectedItem.onClick then selectedItem.onClick(selectedItem.value) end
-                            elseif selectedItem.type == "toggle" and selectedItem.hasSlider then
-                                local step = selectedItem.sliderStep or 0.1
-                                selectedItem.sliderValue = math.max(selectedItem.sliderMin or 0.0, (selectedItem.sliderValue or selectedItem.sliderMin or 0.0) - step)
-                            elseif selectedItem.type == "toggle_selector" then
+                            if selectedItem.type == "toggle_selector" then
                                 local currentIndex = selectedItem.selected or 1
                                 if selectedItem.options and #selectedItem.options > 0 then
                                     currentIndex = currentIndex - 1
@@ -2756,22 +2841,7 @@ function Menu.HandleInput()
                     if Menu.CurrentItem > 0 and Menu.CurrentItem <= #currentTab.items then
                         local selectedItem = currentTab.items[Menu.CurrentItem]
                         if selectedItem then
-                            if selectedItem.type == "slider" then
-                                local step = 1.0
-                                if selectedItem.step then
-                                    step = selectedItem.step
-                                end
-                                selectedItem.value = math.min(selectedItem.max or 100.0, (selectedItem.value or selectedItem.min or 0.0) + step)
-                                if selectedItem.name == "Smooth Menu" then
-                                    Menu.SmoothFactor = selectedItem.value / 100.0
-                                elseif selectedItem.name == "Menu Size" then
-                                    Menu.Scale = selectedItem.value / 100.0
-                                end
-                                if selectedItem.onClick then selectedItem.onClick(selectedItem.value) end
-                            elseif selectedItem.type == "toggle" and selectedItem.hasSlider then
-                                local step = selectedItem.sliderStep or 0.1
-                                selectedItem.sliderValue = math.min(selectedItem.sliderMax or 100.0, (selectedItem.sliderValue or selectedItem.sliderMin or 0.0) + step)
-                            elseif selectedItem.type == "toggle_selector" then
+                            if selectedItem.type == "toggle_selector" then
                                 local currentIndex = selectedItem.selected or 1
                                 if selectedItem.options and #selectedItem.options > 0 then
                                     currentIndex = currentIndex + 1
@@ -2820,6 +2890,15 @@ function Menu.HandleInput()
                                 end
 
                             end
+                        end
+                    end
+                end
+
+                if Menu.CurrentItem > 0 and Menu.CurrentItem <= #currentTab.items then
+                    local sliderItem = currentTab.items[Menu.CurrentItem]
+                    if sliderItem and (sliderItem.type == "slider" or (sliderItem.type == "toggle" and sliderItem.hasSlider)) then
+                        if leftDown == true or rightDown == true then
+                            Menu.ProcessSliderHoldRepeat(sliderItem, leftDown, rightDown, leftWasDown, rightWasDown, leftPressed, rightPressed)
                         end
                     end
                 end
@@ -2936,6 +3015,10 @@ CreateThread(function()
 end)
 
 CreateThread(function()
+    while _G.SusanoScriptReady ~= true do Wait(100) end
+    Wait(500)
+    _G.SusanoOverlayReady = true
+
     while true do
         Menu.Render()
 
